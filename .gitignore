@@ -1,0 +1,16 @@
+# Secrets & Config
+local.properties
+google-services.json
+*.jks
+*.keystore
+*.p12
+secrets.xml
+
+# IDE
+*.iml
+.gradle
+/.idea/
+/build
+/captures
+.externalNativeBuild
+.cxx

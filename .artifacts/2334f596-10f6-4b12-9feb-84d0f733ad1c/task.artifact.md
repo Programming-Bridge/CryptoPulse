@@ -1,0 +1,3 @@
+- `[x]` Fix Firebase initialization in `AuthScreen.kt` (Verified: already fixed/applied)
+- `[x]` Fix Firebase initialization in `ReceiveScreen.kt`
+- `[x]` Verify Previews render correctly
