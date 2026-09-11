@@ -13,12 +13,22 @@ import com.cryptopulse.data.local.CryptoDatabase
 import com.cryptopulse.data.remote.BinanceExchangeProvider
 import com.cryptopulse.data.remote.BinancePrivateApi
 import com.cryptopulse.data.remote.BinancePublicApi
+import com.cryptopulse.data.remote.BitgetApi
+import com.cryptopulse.data.remote.BitgetExchangeProvider
+import com.cryptopulse.data.remote.BybitApi
+import com.cryptopulse.data.remote.BybitExchangeProvider
 import com.cryptopulse.data.remote.CoinbaseApi
 import com.cryptopulse.data.remote.CoinbaseExchangeProvider
 import com.cryptopulse.data.remote.ExchangeProvider
 import com.cryptopulse.data.remote.ExchangeRegistry
+import com.cryptopulse.data.remote.GateIoApi
+import com.cryptopulse.data.remote.GateIoExchangeProvider
 import com.cryptopulse.data.remote.KuCoinApi
 import com.cryptopulse.data.remote.KuCoinExchangeProvider
+import com.cryptopulse.data.remote.MexcApi
+import com.cryptopulse.data.remote.MexcExchangeProvider
+import com.cryptopulse.data.remote.OKXApi
+import com.cryptopulse.data.remote.OKXExchangeProvider
 import com.cryptopulse.data.repository.CryptoRepository
 import com.google.gson.GsonBuilder
 import okhttp3.Interceptor
@@ -72,44 +82,48 @@ class CryptoApp : Application(), ImageLoaderFactory {
             .build()
     }
 
-    private val binanceRetrofit: Retrofit by lazy {
-        Retrofit.Builder()
-            .baseUrl(BuildConfig.BINANCE_BASE_URL)
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create(gson))
-            .build()
-    }
-
-    private val kuCoinRetrofit: Retrofit by lazy {
-        Retrofit.Builder()
-            .baseUrl(BuildConfig.KUCOIN_BASE_URL)
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create(gson))
-            .build()
-    }
-
-    private val coinbaseRetrofit: Retrofit by lazy {
-        Retrofit.Builder()
-            .baseUrl("https://api.coinbase.com/")
+    private fun createRetrofit(baseUrl: String): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
     }
 
     val binancePublicApi: BinancePublicApi by lazy {
-        binanceRetrofit.create(BinancePublicApi::class.java)
+        createRetrofit(BuildConfig.BINANCE_BASE_URL).create(BinancePublicApi::class.java)
     }
 
     val binancePrivateApi: BinancePrivateApi by lazy {
-        binanceRetrofit.create(BinancePrivateApi::class.java)
+        createRetrofit(BuildConfig.BINANCE_BASE_URL).create(BinancePrivateApi::class.java)
     }
 
     val kuCoinApi: KuCoinApi by lazy {
-        kuCoinRetrofit.create(KuCoinApi::class.java)
+        createRetrofit(BuildConfig.KUCOIN_BASE_URL).create(KuCoinApi::class.java)
     }
 
     val coinbaseApi: CoinbaseApi by lazy {
-        coinbaseRetrofit.create(CoinbaseApi::class.java)
+        createRetrofit("https://api.coinbase.com/").create(CoinbaseApi::class.java)
+    }
+
+    val bybitApi: BybitApi by lazy {
+        createRetrofit("https://api.bybit.com/").create(BybitApi::class.java)
+    }
+
+    val bitgetApi: BitgetApi by lazy {
+        createRetrofit("https://api.bitget.com/").create(BitgetApi::class.java)
+    }
+
+    val okxApi: OKXApi by lazy {
+        createRetrofit("https://www.okx.com/").create(OKXApi::class.java)
+    }
+
+    val gateIoApi: GateIoApi by lazy {
+        createRetrofit("https://api.gateio.ws/").create(GateIoApi::class.java)
+    }
+
+    val mexcApi: MexcApi by lazy {
+        createRetrofit("https://api.mexc.com/").create(MexcApi::class.java)
     }
 
     val exchangeRegistry: ExchangeRegistry by lazy {
@@ -117,7 +131,12 @@ class CryptoApp : Application(), ImageLoaderFactory {
             listOf(
                 BinanceExchangeProvider(binancePrivateApi, binancePublicApi),
                 CoinbaseExchangeProvider(coinbaseApi, binancePublicApi),
-                KuCoinExchangeProvider(kuCoinApi)
+                KuCoinExchangeProvider(kuCoinApi),
+                BybitExchangeProvider(bybitApi, binancePublicApi),
+                BitgetExchangeProvider(bitgetApi, binancePublicApi),
+                OKXExchangeProvider(okxApi, binancePublicApi),
+                GateIoExchangeProvider(gateIoApi, binancePublicApi),
+                MexcExchangeProvider(mexcApi, binancePublicApi)
             )
         )
     }
