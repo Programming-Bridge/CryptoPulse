@@ -69,16 +69,15 @@ class KuCoinExchangeProvider(
         return try {
             val response = kuCoinApi.getAllTickers()
             if (response.code == "200000") {
-                // Prioritize USDT pairs, then BTC pairs
                 val prices = mutableMapOf<String, Double>()
                 
-                // 1. Process USDT pairs
+                // 1. Process USDT pairs first (The most reliable base)
                 response.data.ticker.filter { it.symbol.endsWith("-USDT") }.forEach { 
                     val asset = it.symbol.removeSuffix("-USDT")
                     prices[asset] = it.last.toDoubleOrNull() ?: 0.0
                 }
                 
-                // 2. Process BTC pairs for assets not in USDT (e.g., LAB often has a BTC pair)
+                // 2. Process BTC pairs for assets not yet found in USDT
                 val btcPrice = prices["BTC"] ?: 0.0
                 if (btcPrice > 0) {
                     response.data.ticker.filter { it.symbol.endsWith("-BTC") }.forEach {
@@ -89,13 +88,45 @@ class KuCoinExchangeProvider(
                         }
                     }
                 }
+
+                // 3. Special Case: USDT itself
+                if (!prices.containsKey("USDT")) {
+                    prices["USDT"] = 1.0
+                }
+                
+                Log.d("CryptoPulse", "KuCoin: Fetched ${prices.size} prices from tickers")
                 prices
             } else {
+                Log.e("CryptoPulse", "KuCoin: AllTickers error: ${response.code}")
                 emptyMap()
             }
         } catch (e: Exception) {
             Log.e("CryptoPulse", "KuCoin: AllTickers fetch failed: ${e.message}")
             emptyMap()
+        }
+    }
+
+    override suspend fun fetchTickers(): List<TickerInfo> {
+        return try {
+            val response = kuCoinApi.getAllTickers()
+            if (response.code == "200000") {
+                response.data.ticker
+                    .filter { it.symbol.endsWith("-USDT") }
+                    .map { 
+                        TickerInfo(
+                            symbol = it.symbol.removeSuffix("-USDT"),
+                            price = it.last.toDoubleOrNull() ?: 0.0,
+                            change24h = (it.changeRate.toDoubleOrNull() ?: 0.0) * 100, // API provides decimal like 0.02
+                            volume24h = it.volValue.toDoubleOrNull() ?: 0.0
+                        )
+                    }
+                    .sortedByDescending { it.volume24h }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Log.e("CryptoPulse", "KuCoin: fetchTickers failed", e)
+            emptyList()
         }
     }
 

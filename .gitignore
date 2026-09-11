@@ -6,6 +6,10 @@ google-services.json
 *.p12
 secrets.xml
 
+# Internal Artifacts
+.artifacts/
+app/src/main/java/com/cryptopulse/.artifacts/
+
 # IDE
 *.iml
 .gradle

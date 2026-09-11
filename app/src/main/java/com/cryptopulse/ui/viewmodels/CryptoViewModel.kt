@@ -68,8 +68,6 @@ class CryptoViewModel(
     private val _loadingProgress = MutableStateFlow(0f)
     val loadingProgress = _loadingProgress.asStateFlow()
 
-    private val _directPrices = MutableStateFlow<Map<String, Map<String, Double>>>(emptyMap())
-
     private val _connectionEvents = MutableSharedFlow<ConnectionEvent>()
     val connectionEvents = _connectionEvents.asSharedFlow()
 
@@ -77,9 +75,8 @@ class CryptoViewModel(
         coins,
         holdings,
         transactions,
-        isSyncing,
-        _directPrices
-    ) { coinList, holdingList, txList, syncing, directPricesMap ->
+        isSyncing
+    ) { coinList, holdingList, txList, syncing ->
         if (syncing && holdingList.isEmpty()) {
             return@combine DashboardUiState.Loading
         }
@@ -88,7 +85,7 @@ class CryptoViewModel(
         val portfolio = groupedHoldings.mapNotNull { (coinId, coinHoldings) ->
             val totalAmount = coinHoldings.sumOf { it.amount }
             
-            val baseCoin = coinList.find { it.id == coinId } ?: CoinEntity(
+            val coin = coinList.find { it.id == coinId } ?: CoinEntity(
                 id = coinId,
                 symbol = coinId.substringAfter("-").uppercase(),
                 name = coinId.substringAfter("-").replaceFirstChar { it.uppercase() },
@@ -97,11 +94,6 @@ class CryptoViewModel(
                 priceChangePercentage24h = 0.0
             )
 
-            // Resolve Direct Price from Source
-            val primarySource = coinHoldings.firstOrNull()?.source
-            val directPrice = directPricesMap[primarySource]?.get(baseCoin.symbol)
-            val coin = if (directPrice != null) baseCoin.copy(currentPrice = directPrice) else baseCoin
-            
             val inTransactions = txList.filter { it.coinId == coin.id && it.type == "In" }
             val totalAmountIn = inTransactions.sumOf { it.amount }
             val totalCostIn = inTransactions.sumOf { it.value }
@@ -207,10 +199,7 @@ class CryptoViewModel(
     private val _isInitialSyncComplete = MutableStateFlow(false)
     val isInitialSyncComplete = _isInitialSyncComplete.asStateFlow()
 
-    private var lastRefreshTime: Long = 0
-    private val REFRESH_COOLDOWN = 120_000L // 2 minutes for auto
-    private val MANUAL_REFRESH_COOLDOWN = 30_000L // 30 seconds for manual
-    private val AUTO_SYNC_INTERVAL = 60_000L // 1 minute live updates
+    private val AUTO_SYNC_INTERVAL = 60_000L // 1 minute stable interval
 
     val availableSources = listOf("Manual", "Binance", "Coinbase", "Kraken", "MetaMask")
 
@@ -219,7 +208,7 @@ class CryptoViewModel(
     private var autoSyncJob: Job? = null
 
     init {
-        refreshCoins(manual = false)
+        refreshCoins()
         startGlobalAutoSync()
     }
 
@@ -229,83 +218,42 @@ class CryptoViewModel(
             while (true) {
                 delay(AUTO_SYNC_INTERVAL)
                 if (!_isSyncing.value) {
-                    Log.d("CryptoPulse", "Auto-Sync: Triggering background price update...")
-                    repository.refreshCoins()
+                    Log.d("CryptoPulse", "Auto-Sync: Triggering background refresh...")
+                    refreshCoins()
                 }
             }
         }
     }
 
-    fun refreshCoins(manual: Boolean = false) {
-        val currentTime = System.currentTimeMillis()
-        val cooldown = if (manual) MANUAL_REFRESH_COOLDOWN else REFRESH_COOLDOWN
-        
-        if (currentTime - lastRefreshTime < cooldown && lastRefreshTime != 0L) {
-            Log.d("CryptoPulse", "Refresh skipped: Cooldown active")
-            if (manual) _syncMessage.value = "Please wait before refreshing again"
-            return
+    private fun getActiveExchangeProviders(): Map<ExchangeProvider, Map<ExchangeField, String>> {
+        val activeMap = mutableMapOf<ExchangeProvider, Map<ExchangeField, String>>()
+        availableProviders.forEach { provider ->
+            val credentials = mutableMapOf<ExchangeField, String>()
+            provider.requiredFields.forEach { field ->
+                val value = securePrefs.getCredential(provider.name, field)
+                if (value != null) credentials[field] = value
+            }
+            if (credentials.size == provider.requiredFields.size) {
+                activeMap[provider] = credentials
+            }
         }
+        return activeMap
+    }
 
+    fun refreshCoins() {
         viewModelScope.launch {
-            lastRefreshTime = currentTime
             _isSyncing.value = true
             _loadingProgress.value = 0.1f
-            val currentUser = FirebaseAuth.getInstance().currentUser
-            if (currentUser != null) {
-                _syncMessage.value = "Verifying session..."
-                try {
-                    // Force token refresh to verify if the account still exists in Firebase
-                    currentUser.getIdToken(true).await()
-                    _loadingProgress.value = 0.3f
-                } catch (e: Exception) {
-                    // If refresh fails (e.g., user deleted), sign out locally
-                    FirebaseAuth.getInstance().signOut()
-                }
-            }
-
-            _syncMessage.value = "Fetching market prices..."
-            _loadingProgress.value = 0.5f
-            repository.refreshCoins()
             
-            delay(1000) // Small breather to avoid rate limit overlap
-
-            // Auto-sync connected exchanges
-            var anyExchangeSynced = false
-            val newDirectPrices = mutableMapOf<String, Map<String, Double>>()
-
-            availableProviders.forEach { provider ->
-                val credentials = mutableMapOf<ExchangeField, String>()
-                provider.requiredFields.forEach { field ->
-                    val value = securePrefs.getCredential(provider.name, field)
-                    if (value != null) credentials[field] = value
-                }
-
-                if (credentials.size == provider.requiredFields.size) {
-                    _syncMessage.value = "Syncing ${provider.name}..."
-                    try {
-                        repository.syncExchange(provider, credentials)
-                        
-                        // Fetch direct prices from this exchange
-                        val prices = provider.fetchPrices()
-                        if (prices.isNotEmpty()) {
-                            newDirectPrices[provider.name] = prices
-                        }
-
-                        _connectedExchanges.value = _connectedExchanges.value + provider.name
-                        anyExchangeSynced = true
-                    } catch (e: Exception) {
-                        Log.e("CryptoPulse", "Auto-sync failed for ${provider.name}", e)
-                    }
-                }
-            }
-
-            if (newDirectPrices.isNotEmpty()) {
-                _directPrices.value = newDirectPrices
-            }
-
-            if (anyExchangeSynced) {
-                _syncMessage.value = "Updating prices for new tokens..."
-                repository.refreshCoins()
+            val activeProviders = getActiveExchangeProviders()
+            _syncMessage.value = if (activeProviders.isNotEmpty()) "Syncing from exchanges..." else "Fetching market prices..."
+            _loadingProgress.value = 0.5f
+            
+            try {
+                repository.refreshCoins(activeProviders)
+                _connectedExchanges.value = activeProviders.keys.map { it.name }.toSet()
+            } catch (e: Exception) {
+                Log.e("CryptoPulse", "Refresh failed", e)
             }
 
             _loadingProgress.value = 1.0f
@@ -372,25 +320,12 @@ class CryptoViewModel(
             }
             
             try {
-                repository.syncExchange(provider, credentials)
-                
-                // Fetch direct prices from this exchange
-                val prices = provider.fetchPrices()
-                if (prices.isNotEmpty()) {
-                    val current = _directPrices.value.toMutableMap()
-                    current[provider.name] = prices
-                    _directPrices.value = current
-                }
-
-                _connectedExchanges.value = _connectedExchanges.value + provider.name
-                _syncMessage.value = "Sync complete"
+                refreshCoins()
                 _connectionEvents.emit(ConnectionEvent.Success(provider.name))
             } catch (e: Exception) {
                 Log.e("CryptoPulse", "Connection failed for ${provider.name}", e)
                 _syncMessage.value = "Connection failed: ${e.message}"
                 securePrefs.deleteCredentials(provider.name)
-                // Ensure it's removed from connected set if it was there
-                _connectedExchanges.value = _connectedExchanges.value - provider.name
             } finally {
                 _isSyncing.value = false
             }
@@ -400,25 +335,19 @@ class CryptoViewModel(
     fun disconnectExchange(name: String) {
         securePrefs.deleteCredentials(name)
         _connectedExchanges.value = _connectedExchanges.value - name
-        val currentPrices = _directPrices.value.toMutableMap()
-        currentPrices.remove(name)
-        _directPrices.value = currentPrices
+        refreshCoins()
     }
 
     fun fetchMarketChart(coinId: String, days: String, isPolling: Boolean = false) {
         val cacheKey = "$coinId-$days"
-        
-        // Instant update from cache if available
         if (!isPolling && chartCache.containsKey(cacheKey)) {
             _chartData.value = chartCache[cacheKey]!!
         }
 
         viewModelScope.launch {
-            // Only show loader if we have no data at all
             if (_chartData.value.isEmpty()) {
                 _isChartLoading.value = true
             }
-            
             val newData = repository.getMarketChart(coinId, days)
             if (newData.isNotEmpty()) {
                 chartCache[cacheKey] = newData
@@ -432,7 +361,7 @@ class CryptoViewModel(
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             while (true) {
-                delay(15000) // Poll every 15 seconds
+                delay(15000)
                 fetchMarketChart(coinId, days, isPolling = true)
             }
         }
@@ -454,7 +383,6 @@ class CryptoViewModel(
     ) {
         viewModelScope.launch {
             val signedAmount = if (type == "Out") -amount else amount
-            
             val transaction = TransactionEntity(
                 coinId = coin.id,
                 coinName = coin.name,
@@ -465,18 +393,10 @@ class CryptoViewModel(
                 type = type,
                 source = source
             )
-            
             repository.addTransaction(transaction)
-            
             val currentHolding = holdings.value.find { it.coinId == coin.id && it.source == source }
             val currentAmount = currentHolding?.amount ?: 0.0
-            
-            val newAmount = if (isUpdate) {
-                amount // Overwrite for edit mode
-            } else {
-                (currentAmount + signedAmount).coerceAtLeast(0.0)
-            }
-            
+            val newAmount = if (isUpdate) amount else (currentAmount + signedAmount).coerceAtLeast(0.0)
             repository.updateHoldingWithCoin(coin, source, newAmount)
         }
     }

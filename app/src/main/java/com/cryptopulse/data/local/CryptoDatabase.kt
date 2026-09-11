@@ -9,7 +9,7 @@ import com.cryptopulse.data.models.PriceAlertEntity
 import com.cryptopulse.data.models.SnapshotEntity
 import com.cryptopulse.data.models.TransactionEntity
 
-@Database(entities = [CoinEntity::class, TransactionEntity::class, PriceAlertEntity::class, HoldingEntity::class, SnapshotEntity::class, com.cryptopulse.data.models.SymbolMapEntity::class], version = 8, exportSchema = false)
+@Database(entities = [CoinEntity::class, TransactionEntity::class, PriceAlertEntity::class, HoldingEntity::class, SnapshotEntity::class], version = 9, exportSchema = false)
 @TypeConverters(RoomConverters::class)
 abstract class CryptoDatabase : RoomDatabase() {
     abstract val coinDao: CoinDao

@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,26 +16,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import androidx.compose.ui.unit.toSize
+import coil.compose.SubcomposeAsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.cryptopulse.ui.theme.NumericDataStyle
 import com.cryptopulse.ui.theme.StatusGreen
 import com.cryptopulse.ui.theme.StatusRed
 import com.cryptopulse.ui.theme.Typography
-import androidx.compose.ui.composed
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.unit.toSize
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectDragGestures
-
-import androidx.compose.ui.text.style.TextOverflow
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 fun formatPrice(price: Double): String {
@@ -121,7 +126,7 @@ fun DetailedChart(
     Column(modifier = modifier) {
         if (scrubPoint != null && scrubPoint!! < data.size) {
             val point = data[scrubPoint!!]
-            val date = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.US).format(java.util.Date(point.first))
+            val date = SimpleDateFormat("MMM dd, HH:mm", Locale.US).format(Date(point.first))
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -358,18 +363,41 @@ fun AssetRow(
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = coil.request.ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+        SubcomposeAsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
                 .data(imageUrl)
                 .crossfade(enable = true)
-                .diskCachePolicy(coil.request.CachePolicy.ENABLED)
+                .diskCachePolicy(CachePolicy.ENABLED)
                 .build(),
-            contentDescription = null,
+            contentDescription = name,
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)),
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            contentScale = ContentScale.Crop,
+            loading = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .shimmerEffect()
+                )
+            },
+            error = {
+                val firstLetter = symbol.take(1).uppercase(Locale.US)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = firstLetter,
+                        style = Typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         )
         
         Spacer(modifier = Modifier.width(12.dp))

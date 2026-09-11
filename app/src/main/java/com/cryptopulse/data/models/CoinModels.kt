@@ -88,9 +88,3 @@ data class SnapshotEntity(
     val totalValue: Double
 )
 
-@Entity(tableName = "symbol_map")
-data class SymbolMapEntity(
-    @PrimaryKey val symbol: String, // lowercase symbol
-    val coinId: String,
-    val lastUpdated: Long = System.currentTimeMillis()
-)

@@ -11,10 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,14 +46,11 @@ fun DashboardScreen(
     onSearchClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val syncMessage by viewModel.syncMessage.collectAsStateWithLifecycle()
     
     DashboardContent(
         uiState = uiState,
-        isSyncing = isSyncing,
         syncMessage = syncMessage,
-        onRefresh = { viewModel.refreshCoins(manual = true) },
         onAssetClick = onAssetClick,
         onAnalyticsClick = onAnalyticsClick,
         onNotificationsClick = onNotificationsClick,
@@ -72,9 +67,7 @@ fun DashboardScreen(
 @Composable
 fun DashboardContent(
     uiState: DashboardUiState,
-    isSyncing: Boolean,
     syncMessage: String,
-    onRefresh: () -> Unit,
     onAssetClick: (String, Boolean) -> Unit,
     onAnalyticsClick: () -> Unit,
     onNotificationsClick: () -> Unit,
@@ -112,152 +105,148 @@ fun DashboardContent(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { innerPadding ->
-        PullToRefreshBox(
-            isRefreshing = isSyncing,
-            onRefresh = onRefresh,
-            modifier = Modifier.padding(innerPadding)
+        CenteredAdaptiveColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
         ) {
-            CenteredAdaptiveColumn(
-                modifier = Modifier.fillMaxSize()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp)
-                ) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    when (uiState) {
-                        is DashboardUiState.Loading -> {
-                            Box(modifier = Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Text(syncMessage, style = Typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                when (uiState) {
+                    is DashboardUiState.Loading -> {
+                        Box(modifier = Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(syncMessage, style = Typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    is DashboardUiState.Error -> {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text("Error: ${uiState.message}", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    is DashboardUiState.Empty, is DashboardUiState.Success -> {
+                        val portfolio = if (uiState is DashboardUiState.Success) uiState.portfolio else emptyList()
+                        val totalBalance = if (uiState is DashboardUiState.Success) uiState.totalBalance else 0.0
+                        val performance = if (uiState is DashboardUiState.Success) uiState.performance24h else 0.0
+
+                        val formattedBalance = if (totalBalance > 0 && totalBalance < 0.01) {
+                            String.format(java.util.Locale.US, "$%.4f", totalBalance)
+                        } else {
+                            java.text.NumberFormat.getCurrencyInstance(java.util.Locale.US).format(totalBalance)
+                        }
+                        
+                        val performanceText = "${if (performance >= 0) "+" else ""}${String.format(java.util.Locale.US, "%.2f", performance)}%"
+                        
+                        PortfolioCard(
+                            totalBalance = formattedBalance,
+                            percentageChange = performanceText,
+                            sparklineData = portfolio.find { it.coin.symbol == "BTC" }?.coin?.sparklineData ?: emptyList(),
+                            onClick = onAnalyticsClick
+                        )
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        QuickActionsGrid(
+                            onAddAssetClick = onAddAssetClick,
+                            onSyncApiClick = onSyncApiClick,
+                            onAlertsClick = onAlertsClick,
+                            onHistoryClick = onHistoryClick
+                        )
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Text(
+                            text = "Your Portfolio",
+                            style = Typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(bottom = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            if (portfolio.isEmpty()) {
+                                item {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Icon(Icons.Default.AddChart, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(
+                                            "No assets tracked yet.",
+                                            style = Typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Tap '+' to add manual entries or sync with an exchange.",
+                                            style = Typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 32.dp),
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                    }
                                 }
-                            }
-                        }
-                        is DashboardUiState.Error -> {
-                            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                Text("Error: ${uiState.message}", color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                        is DashboardUiState.Empty, is DashboardUiState.Success -> {
-                            val portfolio = if (uiState is DashboardUiState.Success) uiState.portfolio else emptyList()
-                            val totalBalance = if (uiState is DashboardUiState.Success) uiState.totalBalance else 0.0
-                            val performance = if (uiState is DashboardUiState.Success) uiState.performance24h else 0.0
-
-                            val formattedBalance = if (totalBalance > 0 && totalBalance < 0.01) {
-                                String.format(java.util.Locale.US, "$%.4f", totalBalance)
                             } else {
-                                java.text.NumberFormat.getCurrencyInstance(java.util.Locale.US).format(totalBalance)
-                            }
-                            
-                            val performanceText = "${if (performance >= 0) "+" else ""}${String.format(java.util.Locale.US, "%.2f", performance)}%"
-                            
-                            PortfolioCard(
-                                totalBalance = formattedBalance,
-                                percentageChange = performanceText,
-                                sparklineData = portfolio.find { it.coin.symbol == "BTC" }?.coin?.sparklineData ?: emptyList(),
-                                onClick = onAnalyticsClick
-                            )
-                            
-                            Spacer(modifier = Modifier.height(24.dp))
-                            
-                            QuickActionsGrid(
-                                onAddAssetClick = onAddAssetClick,
-                                onSyncApiClick = onSyncApiClick,
-                                onAlertsClick = onAlertsClick,
-                                onHistoryClick = onHistoryClick
-                            )
-                            
-                            Spacer(modifier = Modifier.height(24.dp))
+                                items(
+                                    items = portfolio,
+                                    key = { it.coin.id }
+                                ) { item ->
+                                    val dismissState = rememberSwipeToDismissBoxState()
 
-                            Text(
-                                text = "Your Portfolio",
-                                style = Typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            LazyColumn(
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(bottom = 16.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                if (portfolio.isEmpty()) {
-                                    item {
-                                        Column(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Icon(Icons.Default.AddChart, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
-                                            Spacer(modifier = Modifier.height(16.dp))
-                                            Text(
-                                                "No assets tracked yet.",
-                                                style = Typography.bodyLarge,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                "Tap '+' to add manual entries or sync with an exchange.",
-                                                style = Typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.padding(horizontal = 32.dp),
-                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                            )
+                                    LaunchedEffect(dismissState.currentValue) {
+                                        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
+                                            onDeleteAsset(item.coin.id)
+                                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
                                         }
                                     }
-                                } else {
-                                    items(
-                                        items = portfolio,
-                                        key = { it.coin.id }
-                                    ) { item ->
-                                        val dismissState = rememberSwipeToDismissBoxState()
 
-                                        LaunchedEffect(dismissState.currentValue) {
-                                            if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
-                                                onDeleteAsset(item.coin.id)
-                                                dismissState.snapTo(SwipeToDismissBoxValue.Settled)
+                                    SwipeToDismissBox(
+                                        state = dismissState,
+                                        backgroundContent = {
+                                            val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
+                                                MaterialTheme.colorScheme.errorContainer
+                                            } else Color.Transparent
+                                            
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(color)
+                                                    .padding(horizontal = 20.dp),
+                                                contentAlignment = Alignment.CenterEnd
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Delete,
+                                                    contentDescription = "Delete",
+                                                    tint = MaterialTheme.colorScheme.onErrorContainer
+                                                )
                                             }
-                                        }
-
-                                        SwipeToDismissBox(
-                                            state = dismissState,
-                                            backgroundContent = {
-                                                val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
-                                                    MaterialTheme.colorScheme.errorContainer
-                                                } else Color.Transparent
-                                                
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxSize()
-                                                        .clip(RoundedCornerShape(12.dp))
-                                                        .background(color)
-                                                        .padding(horizontal = 20.dp),
-                                                    contentAlignment = Alignment.CenterEnd
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.Delete,
-                                                        contentDescription = "Delete",
-                                                        tint = MaterialTheme.colorScheme.onErrorContainer
-                                                    )
-                                                }
-                                            },
-                                            enableDismissFromStartToEnd = false
-                                        ) {
-                                            AssetRow(
-                                                name = item.coin.name,
-                                                symbol = item.coin.symbol,
-                                                price = item.coin.currentPrice,
-                                                change = item.coin.priceChangePercentage24h,
-                                                imageUrl = item.coin.imageUrl,
-                                                sources = item.sources,
-                                                amount = item.totalAmount,
-                                                holdingValue = item.totalValue,
-                                                onClick = { onAssetClick(item.coin.id, true) }
-                                            )
-                                        }
+                                        },
+                                        enableDismissFromStartToEnd = false
+                                    ) {
+                                        AssetRow(
+                                            name = item.coin.name,
+                                            symbol = item.coin.symbol,
+                                            price = item.coin.currentPrice,
+                                            change = item.coin.priceChangePercentage24h,
+                                            imageUrl = item.coin.imageUrl,
+                                            sources = item.sources,
+                                            amount = item.totalAmount,
+                                            holdingValue = item.totalValue,
+                                            onClick = { onAssetClick(item.coin.id, true) }
+                                        )
                                     }
                                 }
                             }
@@ -375,7 +364,6 @@ fun DashboardScreenPreview() {
                 totalBalance = 0.0,
                 performance24h = 0.0
             ),
-            isSyncing = false,
             syncMessage = "Ready",
             onAssetClick = { _, _ -> },
             onAnalyticsClick = {},
@@ -385,8 +373,7 @@ fun DashboardScreenPreview() {
             onAlertsClick = {},
             onHistoryClick = {},
             onSearchClick = {},
-            onDeleteAsset = {},
-            onRefresh = {}
+            onDeleteAsset = {}
         )
     }
 }

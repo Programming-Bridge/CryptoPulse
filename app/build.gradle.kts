@@ -28,7 +28,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Inject secrets into BuildConfig
-        buildConfigField("String", "COINGECKO_BASE_URL", "\"${localProperties.getProperty("COINGECKO_BASE_URL") ?: "https://api.coingecko.com/api/v3/"}\"")
         buildConfigField("String", "BINANCE_BASE_URL", "\"${localProperties.getProperty("BINANCE_BASE_URL") ?: "https://api.binance.com/"}\"")
         buildConfigField("String", "KUCOIN_BASE_URL", "\"${localProperties.getProperty("KUCOIN_BASE_URL") ?: "https://api.kucoin.com/"}\"")
     }

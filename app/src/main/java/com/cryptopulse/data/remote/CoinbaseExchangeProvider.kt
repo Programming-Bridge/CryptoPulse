@@ -5,12 +5,12 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import java.util.Locale
 
-class BinanceExchangeProvider(
-    private val binancePrivateApi: BinancePrivateApi,
+class CoinbaseExchangeProvider(
+    private val coinbaseApi: CoinbaseApi,
     private val binancePublicApi: BinancePublicApi
 ) : ExchangeProvider {
 
-    override val name: String = "Binance"
+    override val name: String = "Coinbase"
 
     override val requiredFields: List<ExchangeField> = listOf(
         ExchangeField.API_KEY,
@@ -22,33 +22,33 @@ class BinanceExchangeProvider(
         val secretKey = keys[ExchangeField.SECRET_KEY]?.trim()
 
         if (apiKey.isNullOrEmpty() || secretKey.isNullOrEmpty()) {
-            throw IllegalArgumentException("Binance API Key and Secret Key are required")
+            throw IllegalArgumentException("Coinbase API Key and Secret Key are required")
         }
 
-        val timestamp = System.currentTimeMillis()
-        val queryString = "timestamp=$timestamp"
-        val signature = hmacSha256(secretKey, queryString)
+        val timestamp = (System.currentTimeMillis() / 1000).toString()
+        val requestPath = "/v2/accounts"
+        val method = "GET"
+        val body = ""
+        val message = "$timestamp$method$requestPath$body"
+        val signature = hmacSha256(secretKey, message)
 
-        Log.d("CryptoPulse", "Binance Sync: Fetching account balances...")
-        val response = binancePrivateApi.getAccount(
+        Log.d("CryptoPulse", "Coinbase Sync: Fetching accounts...")
+        val response = coinbaseApi.getAccounts(
             apiKey = apiKey,
-            timestamp = timestamp,
-            signature = signature
+            signature = signature,
+            timestamp = timestamp
         )
 
-        val balanceInfos = response.balances.mapNotNull { dto ->
-            val freeAmount = dto.free.toDoubleOrNull() ?: 0.0
-            val lockedAmount = dto.locked.toDoubleOrNull() ?: 0.0
-            if (freeAmount > 0 || lockedAmount > 0) {
-                BalanceInfo(
-                    asset = dto.asset.uppercase(Locale.US),
-                    free = freeAmount,
-                    locked = lockedAmount
-                )
+        val accounts = response.data ?: emptyList()
+        val balanceInfos = accounts.mapNotNull { account ->
+            val currencyCode = account.currency?.code?.uppercase(Locale.US) ?: return@mapNotNull null
+            val amount = account.balance?.amount?.toDoubleOrNull() ?: 0.0
+            if (amount > 0) {
+                BalanceInfo(asset = currencyCode, free = amount, locked = 0.0)
             } else null
         }
 
-        Log.d("CryptoPulse", "Binance returned ${balanceInfos.size} non-zero asset balances")
+        Log.d("CryptoPulse", "Coinbase returned ${balanceInfos.size} non-zero asset balances")
         return balanceInfos
     }
 
@@ -63,7 +63,7 @@ class BinanceExchangeProvider(
                 } else null
             }.toMap()
         } catch (e: Exception) {
-            Log.e("CryptoPulse", "Binance fetchPrices failed: ${e.message}")
+            Log.e("CryptoPulse", "Coinbase fetchPrices failed: ${e.message}")
             emptyMap()
         }
     }
@@ -81,7 +81,7 @@ class BinanceExchangeProvider(
                 } else null
             }
         } catch (e: Exception) {
-            Log.e("CryptoPulse", "Binance fetchTickers failed: ${e.message}")
+            Log.e("CryptoPulse", "Coinbase fetchTickers failed: ${e.message}")
             emptyList()
         }
     }

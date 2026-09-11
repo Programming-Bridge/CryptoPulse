@@ -7,7 +7,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -30,7 +29,6 @@ fun MarketsScreen(
 ) {
     var query by remember { mutableStateOf("") }
     val allCoins by viewModel.coins.collectAsState()
-    val isSyncing by viewModel.isSyncing.collectAsState()
     var searchResults by remember { mutableStateOf(emptyList<com.cryptopulse.data.models.CoinEntity>()) }
 
     LaunchedEffect(query) {
@@ -46,8 +44,6 @@ fun MarketsScreen(
         query = query,
         onQueryChange = { query = it },
         searchResults = if (query.isEmpty()) allCoins else searchResults,
-        isRefreshing = isSyncing,
-        onRefresh = { viewModel.refreshCoins(manual = true) },
         onAssetClick = onAssetClick,
         onNotificationsClick = onNotificationsClick
     )
@@ -59,8 +55,6 @@ fun MarketsContent(
     query: String,
     onQueryChange: (String) -> Unit,
     searchResults: List<com.cryptopulse.data.models.CoinEntity>,
-    isRefreshing: Boolean,
-    onRefresh: () -> Unit,
     onAssetClick: (String) -> Unit,
     onNotificationsClick: () -> Unit
 ) {
@@ -88,57 +82,52 @@ fun MarketsContent(
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { innerPadding ->
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = onRefresh,
-            modifier = Modifier.padding(innerPadding)
+        CenteredAdaptiveColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
         ) {
-            CenteredAdaptiveColumn(
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                placeholder = { Text("Search coins, tokens...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                shape = RoundedCornerShape(24.dp),
+                colors = TextFieldDefaults.colors(
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                    unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant
+                ),
+                singleLine = true
+            )
+
+            Text(
+                text = if (query.isEmpty()) "Market Overview" else "Search Results",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+            
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp)
+                    .imePadding()
             ) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = onQueryChange,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                    placeholder = { Text("Search coins, tokens...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    shape = RoundedCornerShape(24.dp),
-                    colors = TextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-                        unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant
-                    ),
-                    singleLine = true
-                )
-
-                Text(
-                    text = if (query.isEmpty()) "Market Overview" else "Search Results",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .imePadding()
-                ) {
-                    items(searchResults) { asset ->
-                        AssetRow(
-                            name = asset.name,
-                            symbol = asset.symbol.uppercase(),
-                            price = asset.currentPrice,
-                            change = asset.priceChangePercentage24h,
-                            imageUrl = asset.imageUrl,
-                            onClick = { onAssetClick(asset.id) }
-                        )
-                    }
+                items(searchResults) { asset ->
+                    AssetRow(
+                        name = asset.name,
+                        symbol = asset.symbol.uppercase(),
+                        price = asset.currentPrice,
+                        change = asset.priceChangePercentage24h,
+                        imageUrl = asset.imageUrl,
+                        onClick = { onAssetClick(asset.id) }
+                    )
                 }
             }
         }
@@ -155,8 +144,6 @@ fun MarketsScreenPreview() {
             searchResults = listOf(
                 com.cryptopulse.data.models.CoinEntity("bitcoin", "BTC", "Bitcoin", "", 64000.0, 2.5)
             ),
-            isRefreshing = false,
-            onRefresh = {},
             onAssetClick = {},
             onNotificationsClick = {}
         )

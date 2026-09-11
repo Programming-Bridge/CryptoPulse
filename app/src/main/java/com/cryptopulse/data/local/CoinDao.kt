@@ -16,6 +16,9 @@ interface CoinDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCoins(coins: List<CoinEntity>)
 
+    @Query("DELETE FROM coins WHERE id NOT IN (:top10Ids) AND id NOT IN (SELECT DISTINCT coinId FROM holdings)")
+    suspend fun purgeUnusedCoins(top10Ids: List<String>)
+
     @Query("UPDATE coins SET portfolioAmount = :amount WHERE id = :id")
     suspend fun updatePortfolio(id: String, amount: Double)
 
@@ -29,6 +32,9 @@ interface CoinDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHolding(holding: HoldingEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHoldings(holdings: List<HoldingEntity>)
+
     @Query("SELECT * FROM holdings WHERE coinId = :coinId AND source = :source LIMIT 1")
     suspend fun getHolding(coinId: String, source: String): HoldingEntity?
 
@@ -37,6 +43,15 @@ interface CoinDao {
 
     @Query("DELETE FROM holdings WHERE coinId = :coinId")
     suspend fun deleteHoldingsByCoinId(coinId: String)
+
+    @Query("DELETE FROM holdings WHERE source = :source")
+    suspend fun deleteHoldingsBySource(source: String)
+
+    @Transaction
+    suspend fun replaceHoldingsForSource(source: String, newHoldings: List<HoldingEntity>) {
+        deleteHoldingsBySource(source)
+        insertHoldings(newHoldings)
+    }
 
     @Query("DELETE FROM transactions WHERE coinId = :coinId")
     suspend fun deleteTransactionsByCoinId(coinId: String)
@@ -71,13 +86,4 @@ interface CoinDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSnapshot(snapshot: SnapshotEntity)
 
-    // Symbol Map Caching
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSymbolMap(mapping: List<com.cryptopulse.data.models.SymbolMapEntity>)
-
-    @Query("SELECT * FROM symbol_map")
-    suspend fun getSymbolMap(): List<com.cryptopulse.data.models.SymbolMapEntity>
-
-    @Query("SELECT COUNT(*) FROM symbol_map")
-    suspend fun getSymbolMapCount(): Int
 }

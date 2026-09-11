@@ -161,13 +161,35 @@ fun CoinDetailsScreen(
                         if (isChartLoading && chartData.isEmpty()) {
                             CircularProgressIndicator(modifier = Modifier.size(32.dp))
                         } else {
-                            DetailedChart(
-                                data = chartData.ifEmpty { asset.sparklineData.mapIndexed { index, d -> index.toLong() to d } },
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(bottom = 16.dp),
-                                color = if (asset.priceChangePercentage24h >= 0) StatusGreen else StatusRed
-                            )
+                            val displayData = chartData.ifEmpty { asset.sparklineData.mapIndexed { index, d -> index.toLong() to d } }
+                            if (displayData.isNotEmpty()) {
+                                DetailedChart(
+                                    data = displayData,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(bottom = 16.dp),
+                                    color = if (asset.priceChangePercentage24h >= 0) StatusGreen else StatusRed
+                                )
+                            } else {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Historical chart unavailable",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Live prices are actively updating via Binance Market Engine.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
                         }
                     }
                 }
