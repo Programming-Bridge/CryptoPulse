@@ -14,7 +14,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +25,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.cryptopulse.data.models.ExchangeSyncStatus
 import com.cryptopulse.data.remote.ExchangeField
 import com.cryptopulse.data.remote.ExchangeProvider
+import com.cryptopulse.ui.components.CenteredAdaptiveColumn
 import com.cryptopulse.ui.theme.CryptoPulseTheme
 import com.cryptopulse.ui.theme.Error
 import com.cryptopulse.ui.theme.StatusGreen
@@ -79,55 +79,54 @@ fun ConnectExchangeScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
-            ) {
-                item {
-                    Text(
-                        "Link your favorite exchanges to track your spot portfolio in real-time.",
-                        style = Typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                item {
-                    Text("Supported Exchanges", style = Typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                }
-                
-                items(viewModel.availableProviders) { provider ->
-                    val isConnected = connectedExchanges.contains(provider.name)
-                    val status = exchangeSyncStatuses[provider.name] ?: if (isConnected) ExchangeSyncStatus.Connected else null
-
-                    ExchangeItem(
-                        providerName = provider.name,
-                        isConnected = isConnected,
-                        status = status,
-                        onConnectClick = { selectedProvider = provider },
-                        onDisconnectClick = { viewModel.disconnectExchange(provider.name) }
-                    )
-                }
-
-                if (viewModel.availableProviders.isEmpty()) {
-                    item {
-                        Text("No providers available yet.", style = Typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-
-            if (isSyncing && selectedProvider == null) {
-                Surface(
+        CenteredAdaptiveColumn(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color.Black.copy(alpha = 0.5f)
+                    contentPadding = PaddingValues(
+                        top = innerPadding.calculateTopPadding() + 8.dp,
+                        bottom = innerPadding.calculateBottomPadding() + 88.dp,
+                        start = 16.dp,
+                        end = 16.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(syncMessage, color = Color.White, style = Typography.titleMedium)
+                    item {
+                        Text(
+                            "Link your favorite exchanges to track your spot portfolio in real-time.",
+                            style = Typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+
+                    item {
+                        Text(
+                            "Supported Exchanges",
+                            style = Typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    items(viewModel.availableProviders) { provider ->
+                        val isConnected = connectedExchanges.contains(provider.name)
+                        val status = exchangeSyncStatuses[provider.name] ?: if (isConnected) ExchangeSyncStatus.Connected else null
+
+                        ExchangeItem(
+                            providerName = provider.name,
+                            isConnected = isConnected,
+                            status = status,
+                            onConnectClick = { selectedProvider = provider },
+                            onDisconnectClick = { viewModel.disconnectExchange(provider.name) }
+                        )
+                    }
+
+                    if (viewModel.availableProviders.isEmpty()) {
+                        item {
+                            Text("No providers available yet.", style = Typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
@@ -151,7 +150,7 @@ fun DynamicConnectDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("Enter your read-only credentials to import your portfolio data securely.", style = Typography.bodyMedium)
-                
+
                 if (syncMessage.contains("failed", ignoreCase = true)) {
                     Surface(
                         color = Error.copy(alpha = 0.1f),

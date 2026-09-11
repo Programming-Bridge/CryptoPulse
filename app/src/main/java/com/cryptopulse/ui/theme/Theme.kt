@@ -71,6 +71,7 @@ fun CryptoPulseTheme(
                 val controller = WindowCompat.getInsetsController(it, view)
                 controller.isAppearanceLightStatusBars = !darkTheme
                 controller.isAppearanceLightNavigationBars = !darkTheme
+                it.navigationBarColor = colorScheme.surfaceContainerLowest.toArgb()
             }
         }
     }

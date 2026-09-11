@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import java.util.Date
@@ -245,7 +246,7 @@ class CryptoViewModel(
     }
 
     fun refreshCoins() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             _isSyncing.value = true
             _loadingProgress.value = 0.1f
             
