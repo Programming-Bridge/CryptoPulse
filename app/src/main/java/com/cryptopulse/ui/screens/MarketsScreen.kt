@@ -1,5 +1,10 @@
 package com.cryptopulse.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,10 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+import com.cryptopulse.data.models.CoinEntity
 import com.cryptopulse.ui.components.AssetRow
+import com.cryptopulse.ui.components.AssetRowSkeleton
 import com.cryptopulse.ui.components.CenteredAdaptiveColumn
 import com.cryptopulse.ui.theme.CryptoPulseTheme
-
 import com.cryptopulse.ui.viewmodels.CryptoViewModel
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
@@ -29,11 +35,11 @@ fun MarketsScreen(
 ) {
     var query by remember { mutableStateOf("") }
     val allCoins by viewModel.coins.collectAsState()
-    var searchResults by remember { mutableStateOf(emptyList<com.cryptopulse.data.models.CoinEntity>()) }
+    var searchResults by remember { mutableStateOf(emptyList<CoinEntity>()) }
 
     LaunchedEffect(query) {
         if (query.length > 1) {
-            delay(300.milliseconds)
+            delay(200.milliseconds)
             searchResults = viewModel.searchCoins(query)
         } else {
             searchResults = emptyList()
@@ -54,7 +60,7 @@ fun MarketsScreen(
 fun MarketsContent(
     query: String,
     onQueryChange: (String) -> Unit,
-    searchResults: List<com.cryptopulse.data.models.CoinEntity>,
+    searchResults: List<CoinEntity>,
     onAssetClick: (String) -> Unit,
     onNotificationsClick: () -> Unit
 ) {
@@ -112,22 +118,44 @@ fun MarketsContent(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
-            
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .imePadding()
-            ) {
-                items(searchResults) { asset ->
-                    AssetRow(
-                        name = asset.name,
-                        symbol = asset.symbol.uppercase(),
-                        price = asset.currentPrice,
-                        change = asset.priceChangePercentage24h,
-                        imageUrl = asset.imageUrl,
-                        onClick = { onAssetClick(asset.id) }
-                    )
+
+            AnimatedContent(
+                targetState = searchResults.isEmpty() && query.isEmpty(),
+                transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
+                label = "MarketsListTransition"
+            ) { isLoading ->
+                if (isLoading) {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(6) {
+                            AssetRowSkeleton()
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .imePadding()
+                    ) {
+                        items(
+                            items = searchResults,
+                            key = { it.id }
+                        ) { asset ->
+                            Box(modifier = Modifier.animateItem()) {
+                                AssetRow(
+                                    name = asset.name,
+                                    symbol = asset.symbol.uppercase(),
+                                    price = asset.currentPrice,
+                                    change = asset.priceChangePercentage24h,
+                                    imageUrl = asset.imageUrl,
+                                    onClick = { onAssetClick(asset.id) }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -142,7 +170,7 @@ fun MarketsScreenPreview() {
             query = "bit",
             onQueryChange = {},
             searchResults = listOf(
-                com.cryptopulse.data.models.CoinEntity("bitcoin", "BTC", "Bitcoin", "", 64000.0, 2.5)
+                CoinEntity("bitcoin", "BTC", "Bitcoin", "", 64000.0, 2.5)
             ),
             onAssetClick = {},
             onNotificationsClick = {}

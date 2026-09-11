@@ -24,6 +24,7 @@ import java.util.Locale
 import android.util.Log
 
 import com.cryptopulse.data.local.prefs.SecurePrefsManager
+import com.cryptopulse.data.models.ExchangeSyncStatus
 import com.cryptopulse.data.remote.ExchangeField
 import com.cryptopulse.data.remote.ExchangeProvider
 import com.google.firebase.auth.FirebaseAuth
@@ -70,6 +71,9 @@ class CryptoViewModel(
 
     private val _connectionEvents = MutableSharedFlow<ConnectionEvent>()
     val connectionEvents = _connectionEvents.asSharedFlow()
+
+    val exchangeSyncStatuses: StateFlow<Map<String, ExchangeSyncStatus>> =
+        repository.exchangeSyncStatuses.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     val uiState: StateFlow<DashboardUiState> = combine(
         coins,

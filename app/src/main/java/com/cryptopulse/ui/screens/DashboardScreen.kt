@@ -1,5 +1,10 @@
 package com.cryptopulse.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,18 +25,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cryptopulse.ui.components.AssetRow
+import com.cryptopulse.ui.components.AssetRowSkeleton
 import com.cryptopulse.ui.components.GlassCard
 import com.cryptopulse.ui.components.CenteredAdaptiveColumn
 import androidx.compose.ui.tooling.preview.Preview
+import com.cryptopulse.ui.components.SparklineChart
 import com.cryptopulse.ui.theme.CryptoPulseTheme
 import com.cryptopulse.ui.theme.NumericDataStyle
 import com.cryptopulse.ui.theme.Typography
 import com.cryptopulse.ui.viewmodels.CryptoViewModel
 import com.cryptopulse.ui.viewmodels.DashboardUiState
+import java.text.NumberFormat
+import java.util.Locale
 
 @Composable
 fun DashboardScreen(
@@ -117,136 +127,144 @@ fun DashboardContent(
             ) {
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                when (uiState) {
-                    is DashboardUiState.Loading -> {
-                        Box(modifier = Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(syncMessage, style = Typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                AnimatedContent(
+                    targetState = uiState,
+                    transitionSpec = { fadeIn(tween(350)) togetherWith fadeOut(tween(350)) },
+                    label = "DashboardStateTransition"
+                ) { state ->
+                    when (state) {
+                        is DashboardUiState.Loading -> {
+                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                AssetRowSkeleton()
+                                AssetRowSkeleton()
+                                AssetRowSkeleton()
+                                AssetRowSkeleton()
                             }
                         }
-                    }
-                    is DashboardUiState.Error -> {
-                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text("Error: ${uiState.message}", color = MaterialTheme.colorScheme.error)
+                        is DashboardUiState.Error -> {
+                            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Text("Error: ${state.message}", color = MaterialTheme.colorScheme.error)
+                            }
                         }
-                    }
-                    is DashboardUiState.Empty, is DashboardUiState.Success -> {
-                        val portfolio = if (uiState is DashboardUiState.Success) uiState.portfolio else emptyList()
-                        val totalBalance = if (uiState is DashboardUiState.Success) uiState.totalBalance else 0.0
-                        val performance = if (uiState is DashboardUiState.Success) uiState.performance24h else 0.0
+                        is DashboardUiState.Empty, is DashboardUiState.Success -> {
+                            val portfolio = if (state is DashboardUiState.Success) state.portfolio else emptyList()
+                            val totalBalance = if (state is DashboardUiState.Success) state.totalBalance else 0.0
+                            val performance = if (state is DashboardUiState.Success) state.performance24h else 0.0
 
-                        val formattedBalance = if (totalBalance > 0 && totalBalance < 0.01) {
-                            String.format(java.util.Locale.US, "$%.4f", totalBalance)
-                        } else {
-                            java.text.NumberFormat.getCurrencyInstance(java.util.Locale.US).format(totalBalance)
-                        }
-                        
-                        val performanceText = "${if (performance >= 0) "+" else ""}${String.format(java.util.Locale.US, "%.2f", performance)}%"
-                        
-                        PortfolioCard(
-                            totalBalance = formattedBalance,
-                            percentageChange = performanceText,
-                            sparklineData = portfolio.find { it.coin.symbol == "BTC" }?.coin?.sparklineData ?: emptyList(),
-                            onClick = onAnalyticsClick
-                        )
-                        
-                        Spacer(modifier = Modifier.height(24.dp))
-                        
-                        QuickActionsGrid(
-                            onAddAssetClick = onAddAssetClick,
-                            onSyncApiClick = onSyncApiClick,
-                            onAlertsClick = onAlertsClick,
-                            onHistoryClick = onHistoryClick
-                        )
-                        
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Text(
-                            text = "Your Portfolio",
-                            style = Typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        LazyColumn(
-                            modifier = Modifier.weight(1f),
-                            contentPadding = PaddingValues(bottom = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            if (portfolio.isEmpty()) {
-                                item {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Icon(Icons.Default.AddChart, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Text(
-                                            "No assets tracked yet.",
-                                            style = Typography.bodyLarge,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            "Tap '+' to add manual entries or sync with an exchange.",
-                                            style = Typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(horizontal = 32.dp),
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                        )
-                                    }
-                                }
+                            val formattedBalance = if (totalBalance > 0 && totalBalance < 0.01) {
+                                String.format(Locale.US, "$%.4f", totalBalance)
                             } else {
-                                items(
-                                    items = portfolio,
-                                    key = { it.coin.id }
-                                ) { item ->
-                                    val dismissState = rememberSwipeToDismissBoxState()
+                                NumberFormat.getCurrencyInstance(Locale.US).format(totalBalance)
+                            }
+                            
+                            val performanceText = "${if (performance >= 0) "+" else ""}${String.format(
+                                Locale.US, "%.2f", performance)}%"
+                            
+                            Column {
+                                PortfolioCard(
+                                    totalBalance = formattedBalance,
+                                    percentageChange = performanceText,
+                                    sparklineData = portfolio.find { it.coin.symbol == "BTC" }?.coin?.sparklineData ?: emptyList(),
+                                    onClick = onAnalyticsClick
+                                )
+                                
+                                Spacer(modifier = Modifier.height(24.dp))
+                                
+                                QuickActionsGrid(
+                                    onAddAssetClick = onAddAssetClick,
+                                    onSyncApiClick = onSyncApiClick,
+                                    onAlertsClick = onAlertsClick,
+                                    onHistoryClick = onHistoryClick
+                                )
+                                
+                                Spacer(modifier = Modifier.height(24.dp))
 
-                                    LaunchedEffect(dismissState.currentValue) {
-                                        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
-                                            onDeleteAsset(item.coin.id)
-                                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                                        }
-                                    }
+                                Text(
+                                    text = "Your Portfolio",
+                                    style = Typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
 
-                                    SwipeToDismissBox(
-                                        state = dismissState,
-                                        backgroundContent = {
-                                            val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
-                                                MaterialTheme.colorScheme.errorContainer
-                                            } else Color.Transparent
-                                            
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .background(color)
-                                                    .padding(horizontal = 20.dp),
-                                                contentAlignment = Alignment.CenterEnd
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(bottom = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    if (portfolio.isEmpty()) {
+                                        item {
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
                                             ) {
-                                                Icon(
-                                                    Icons.Default.Delete,
-                                                    contentDescription = "Delete",
-                                                    tint = MaterialTheme.colorScheme.onErrorContainer
+                                                Icon(Icons.Default.AddChart, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
+                                                Spacer(modifier = Modifier.height(16.dp))
+                                                Text(
+                                                    "No assets tracked yet.",
+                                                    style = Typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    "Tap '+' to add manual entries or sync with an exchange.",
+                                                    style = Typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.padding(horizontal = 32.dp),
+                                                    textAlign = TextAlign.Center
                                                 )
                                             }
-                                        },
-                                        enableDismissFromStartToEnd = false
-                                    ) {
-                                        AssetRow(
-                                            name = item.coin.name,
-                                            symbol = item.coin.symbol,
-                                            price = item.coin.currentPrice,
-                                            change = item.coin.priceChangePercentage24h,
-                                            imageUrl = item.coin.imageUrl,
-                                            sources = item.sources,
-                                            amount = item.totalAmount,
-                                            holdingValue = item.totalValue,
-                                            onClick = { onAssetClick(item.coin.id, true) }
-                                        )
+                                        }
+                                    } else {
+                                        items(
+                                            items = portfolio,
+                                            key = { it.coin.id }
+                                        ) { item ->
+                                            val dismissState = rememberSwipeToDismissBoxState()
+
+                                            LaunchedEffect(dismissState.currentValue) {
+                                                if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
+                                                    onDeleteAsset(item.coin.id)
+                                                    dismissState.snapTo(SwipeToDismissBoxValue.Settled)
+                                                }
+                                            }
+
+                                            SwipeToDismissBox(
+                                                state = dismissState,
+                                                backgroundContent = {
+                                                    val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
+                                                        MaterialTheme.colorScheme.errorContainer
+                                                    } else Color.Transparent
+                                                    
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxSize()
+                                                            .clip(RoundedCornerShape(12.dp))
+                                                            .background(color)
+                                                            .padding(horizontal = 20.dp),
+                                                        contentAlignment = Alignment.CenterEnd
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.Delete,
+                                                            contentDescription = "Delete",
+                                                            tint = MaterialTheme.colorScheme.onErrorContainer
+                                                        )
+                                                    }
+                                                },
+                                                enableDismissFromStartToEnd = false
+                                            ) {
+                                                AssetRow(
+                                                    name = item.coin.name,
+                                                    symbol = item.coin.symbol,
+                                                    price = item.coin.currentPrice,
+                                                    change = item.coin.priceChangePercentage24h,
+                                                    imageUrl = item.coin.imageUrl,
+                                                    sources = item.sources,
+                                                    amount = item.totalAmount,
+                                                    holdingValue = item.totalValue,
+                                                    onClick = { onAssetClick(item.coin.id, true) }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -342,8 +360,8 @@ fun PortfolioCard(
                     Text(percentageChange, style = NumericDataStyle, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
-            
-            com.cryptopulse.ui.components.SparklineChart(
+
+            SparklineChart(
                 data = sparklineData,
                 modifier = Modifier
                     .width(100.dp)

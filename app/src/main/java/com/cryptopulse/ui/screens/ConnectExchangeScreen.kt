@@ -1,17 +1,20 @@
 package com.cryptopulse.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,16 +23,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+import com.cryptopulse.data.models.ExchangeSyncStatus
 import com.cryptopulse.data.remote.ExchangeField
 import com.cryptopulse.data.remote.ExchangeProvider
 import com.cryptopulse.ui.theme.CryptoPulseTheme
+import com.cryptopulse.ui.theme.Error
 import com.cryptopulse.ui.theme.StatusGreen
 import com.cryptopulse.ui.theme.Typography
-import com.cryptopulse.ui.theme.Error
 import com.cryptopulse.ui.viewmodels.ConnectionEvent
 import com.cryptopulse.ui.viewmodels.CryptoViewModel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +40,7 @@ fun ConnectExchangeScreen(
     onBackClick: () -> Unit
 ) {
     val connectedExchanges by viewModel.connectedExchanges.collectAsState()
+    val exchangeSyncStatuses by viewModel.exchangeSyncStatuses.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
     var selectedProvider by remember { mutableStateOf<ExchangeProvider?>(null) }
@@ -54,6 +57,7 @@ fun ConnectExchangeScreen(
         DynamicConnectDialog(
             provider = selectedProvider!!,
             isSyncing = isSyncing,
+            syncMessage = syncMessage,
             onDismiss = { if (!isSyncing) selectedProvider = null },
             onConnect = { credentials ->
                 viewModel.connectExchange(selectedProvider!!, credentials)
@@ -82,7 +86,7 @@ fun ConnectExchangeScreen(
             ) {
                 item {
                     Text(
-                        "Link your favorite exchanges and wallets to track everything in one place.",
+                        "Link your favorite exchanges to track your spot portfolio in real-time.",
                         style = Typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -94,8 +98,12 @@ fun ConnectExchangeScreen(
                 
                 items(viewModel.availableProviders) { provider ->
                     val isConnected = connectedExchanges.contains(provider.name)
+                    val status = exchangeSyncStatuses[provider.name] ?: if (isConnected) ExchangeSyncStatus.Connected else null
+
                     ExchangeItem(
-                        exchange = ExchangeInfo(provider.name, isConnected),
+                        providerName = provider.name,
+                        isConnected = isConnected,
+                        status = status,
                         onConnectClick = { selectedProvider = provider },
                         onDisconnectClick = { viewModel.disconnectExchange(provider.name) }
                     )
@@ -108,7 +116,7 @@ fun ConnectExchangeScreen(
                 }
             }
 
-            if (isSyncing) {
+            if (isSyncing && selectedProvider == null) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Black.copy(alpha = 0.5f)
@@ -131,6 +139,7 @@ fun ConnectExchangeScreen(
 fun DynamicConnectDialog(
     provider: ExchangeProvider,
     isSyncing: Boolean,
+    syncMessage: String,
     onDismiss: () -> Unit,
     onConnect: (Map<ExchangeField, String>) -> Unit
 ) {
@@ -142,6 +151,28 @@ fun DynamicConnectDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("Enter your read-only credentials to import your portfolio data securely.", style = Typography.bodyMedium)
+                
+                if (syncMessage.contains("failed", ignoreCase = true)) {
+                    Surface(
+                        color = Error.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = Error)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = syncMessage,
+                                style = Typography.bodySmall,
+                                color = Error
+                            )
+                        }
+                    }
+                }
+
                 provider.requiredFields.forEach { field ->
                     OutlinedTextField(
                         value = credentials[field] ?: "",
@@ -176,44 +207,87 @@ fun DynamicConnectDialog(
 
 @Composable
 fun ExchangeItem(
-    exchange: ExchangeInfo,
+    providerName: String,
+    isConnected: Boolean,
+    status: ExchangeSyncStatus?,
     onConnectClick: () -> Unit,
     onDisconnectClick: () -> Unit
 ) {
+    val isAuthError = status is ExchangeSyncStatus.AuthError
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
-        modifier = Modifier.fillMaxWidth()
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isAuthError) Error.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f)
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                if (isAuthError || !isConnected) onConnectClick()
+            }
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(modifier = Modifier.size(48.dp), shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = CircleShape,
+                color = if (isAuthError) Error.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceContainerHighest
+            ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(if (exchange.isConnected) Icons.Default.Link else Icons.Default.Add, contentDescription = null, tint = if (exchange.isConnected) StatusGreen else MaterialTheme.colorScheme.primary)
+                    Icon(
+                        imageVector = when {
+                            isAuthError -> Icons.Default.ErrorOutline
+                            isConnected -> Icons.Default.Link
+                            else -> Icons.Default.Add
+                        },
+                        contentDescription = null,
+                        tint = when {
+                            isAuthError -> Error
+                            isConnected -> StatusGreen
+                            else -> MaterialTheme.colorScheme.primary
+                        }
+                    )
                 }
             }
+
             Spacer(modifier = Modifier.width(16.dp))
+
             Column(modifier = Modifier.weight(1f)) {
-                Text(exchange.name, style = Typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
-                Text(if (exchange.isConnected) "Connected" else "Not Connected", style = Typography.labelMedium, color = if (exchange.isConnected) StatusGreen else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = providerName,
+                    style = Typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+                if (isAuthError) {
+                    Text(
+                        text = "Invalid API Key or Passphrase - Tap to fix",
+                        style = Typography.labelMedium,
+                        color = Error
+                    )
+                }
             }
-            if (exchange.isConnected) {
+
+            if (isConnected) {
                 IconButton(onClick = onDisconnectClick) {
-                    Icon(Icons.Default.LinkOff, contentDescription = "Disconnect", tint = Error)
+                    Icon(
+                        imageVector = Icons.Default.LinkOff,
+                        contentDescription = "Disconnect",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
                 }
             } else {
                 TextButton(onClick = onConnectClick) {
-                    Text("Connect", color = MaterialTheme.colorScheme.primary)
+                    Text("Connect", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
     }
 }
-
-data class ExchangeInfo(val name: String, val isConnected: Boolean)
 
 @Preview(showBackground = true)
 @Composable

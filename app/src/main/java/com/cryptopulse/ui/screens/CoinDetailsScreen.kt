@@ -23,6 +23,7 @@ import com.cryptopulse.data.models.CoinEntity
 import com.cryptopulse.ui.components.CenteredAdaptiveColumn
 import com.cryptopulse.ui.components.CryptoButton
 import com.cryptopulse.ui.components.DetailedChart
+import com.cryptopulse.ui.components.LiveSyncRadarDot
 import com.cryptopulse.ui.components.TrendTag
 import com.cryptopulse.ui.theme.CryptoPulseTheme
 import com.cryptopulse.ui.theme.NumericDataStyle
@@ -132,7 +133,11 @@ fun CoinDetailsScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             val isLive = selectedTimeframe == "1H" || selectedTimeframe == "24H"
-                            Box(modifier = Modifier.size(8.dp).background(if (isLive) StatusGreen else Color.Gray, CircleShape))
+                            if (isLive) {
+                                LiveSyncRadarDot()
+                            } else {
+                                Box(modifier = Modifier.size(8.dp).background(Color.Gray, CircleShape))
+                            }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(if (isLive) "LIVE PRICE" else "CLOSE PRICE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

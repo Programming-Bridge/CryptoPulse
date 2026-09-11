@@ -3,6 +3,7 @@ package com.cryptopulse.data.repository
 import android.util.Log
 import com.cryptopulse.data.local.CoinDao
 import com.cryptopulse.data.models.CoinEntity
+import com.cryptopulse.data.models.ExchangeSyncStatus
 import com.cryptopulse.data.models.HoldingEntity
 import com.cryptopulse.data.models.PriceAlertEntity
 import com.cryptopulse.data.models.SnapshotEntity
@@ -15,9 +16,13 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
+import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -38,6 +43,9 @@ class CryptoRepository(
     val priceAlerts: Flow<List<PriceAlertEntity>> = dao.getPriceAlerts()
     val allHoldings: Flow<List<HoldingEntity>> = dao.getAllHoldings()
     val portfolioHistory: Flow<List<SnapshotEntity>> = dao.getAllSnapshots()
+
+    private val _exchangeSyncStatuses = MutableStateFlow<Map<String, ExchangeSyncStatus>>(emptyMap())
+    val exchangeSyncStatuses: Flow<Map<String, ExchangeSyncStatus>> = _exchangeSyncStatuses.asStateFlow()
 
     private val knownWinners = mapOf(
         "btc" to "bitcoin",
@@ -108,7 +116,7 @@ class CryptoRepository(
     suspend fun refreshCoins(
         activeProviders: Map<ExchangeProvider, Map<ExchangeField, String>> = emptyMap()
     ) = withContext(Dispatchers.IO) {
-        // 1. Always update Top 30 Market data via Binance Public API & CoinCap CDN
+        // 1. Always update Top 200 Market data via Binance Public API & CoinCap CDN
         syncMarketData()
         
         // 2. Sync dynamic portfolio data from exchanges if connected
@@ -300,6 +308,7 @@ class CryptoRepository(
 
     suspend fun syncExchange(provider: ExchangeProvider, keys: Map<ExchangeField, String>) = withContext(Dispatchers.IO) {
         Log.d("CryptoPulse", "Starting sync for ${provider.name}")
+        _exchangeSyncStatuses.update { it + (provider.name to ExchangeSyncStatus.Syncing) }
         try {
             val balances = provider.fetchBalances(keys)
             val exchangePrices = provider.fetchPrices()
@@ -347,10 +356,46 @@ class CryptoRepository(
             }
             dao.replaceHoldingsForSource(provider.name, newHoldings)
 
+            _exchangeSyncStatuses.update { it + (provider.name to ExchangeSyncStatus.Connected) }
             Log.d("CryptoPulse", "Sync for ${provider.name} completed successfully")
-        } catch (e: Exception) {
+        } catch (e: HttpException) {
+            val errorMsg = if (e.code() == 401 || e.code() == 403) {
+                "Authentication failed: Invalid API Key, Secret, or Passphrase."
+            } else {
+                "HTTP Error ${e.code()}: ${e.message()}"
+            }
+            _exchangeSyncStatuses.update { it + (provider.name to ExchangeSyncStatus.AuthError(errorMsg)) }
             Log.e("CryptoPulse", "Error syncing ${provider.name}: ${e.message}", e)
             throw e
+        } catch (e: IOException) {
+            val errorMsg = "Network error connecting to ${provider.name}"
+            _exchangeSyncStatuses.update { it + (provider.name to ExchangeSyncStatus.NetworkError(errorMsg)) }
+            Log.e("CryptoPulse", "Network error syncing ${provider.name}: ${e.message}", e)
+            throw e
+        } catch (e: Exception) {
+            val errorMsg = e.message ?: "Failed to sync ${provider.name}"
+            _exchangeSyncStatuses.update { it + (provider.name to ExchangeSyncStatus.AuthError(errorMsg)) }
+            Log.e("CryptoPulse", "Error syncing ${provider.name}: ${e.message}", e)
+            throw e
+        }
+    }
+
+    suspend fun testAndValidateExchange(
+        provider: ExchangeProvider,
+        keys: Map<ExchangeField, String>
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            syncExchange(provider, keys)
+            Result.success(Unit)
+        } catch (e: HttpException) {
+            val msg = if (e.code() == 401 || e.code() == 403) {
+                "Authentication failed: Invalid API Key, Secret, or Passphrase."
+            } else {
+                "HTTP Error ${e.code()}: ${e.message()}"
+            }
+            Result.failure(Exception(msg))
+        } catch (e: Exception) {
+            Result.failure(Exception(e.message ?: "Failed to connect to ${provider.name}"))
         }
     }
 }
