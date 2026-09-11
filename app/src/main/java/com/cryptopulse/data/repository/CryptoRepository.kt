@@ -131,16 +131,16 @@ class CryptoRepository(
         val allCoinsInDb = coins.first()
 
         // Filtering: Active USDT pairs, non-leveraged
-        val top30Tickers = rawTickers
+        val top200Tickers = rawTickers
             .filter { dto ->
                 dto.symbol.endsWith("USDT") && !isLeveragedToken(dto.symbol)
             }
             .sortedByDescending { dto ->
                 dto.quoteVolume?.toDoubleOrNull() ?: 0.0
             }
-            .take(30)
+            .take(200)
 
-        val marketEntities = top30Tickers.map { dto ->
+        val marketEntities = top200Tickers.map { dto ->
             val baseAsset = dto.symbol.removeSuffix("USDT").uppercase(Locale.US)
             val existing = allCoinsInDb.find { it.symbol.equals(baseAsset, ignoreCase = true) }
             val winnerId = knownWinners[baseAsset.lowercase(Locale.US)]
@@ -165,11 +165,11 @@ class CryptoRepository(
         // Ephemeral Market Cache Upsert using Room OnConflictStrategy.REPLACE
         dao.insertCoins(marketEntities)
 
-        // Purge market cache entries that are not in Top 30 AND not in holdings
-        val top30Ids = marketEntities.map { it.id }
-        dao.purgeUnusedCoins(top30Ids)
+        // Purge market cache entries that are not in Top 200 AND not in holdings
+        val top200Ids = marketEntities.map { it.id }
+        dao.purgeUnusedCoins(top200Ids)
 
-        Log.d("CryptoPulse", "Market Sync: Binance Public Sweep Success (${marketEntities.size} Top 30 USDT pairs)")
+        Log.d("CryptoPulse", "Market Sync: Binance Public Sweep Success (${marketEntities.size} Top 200 USDT pairs)")
     }
 
     private suspend fun syncDynamicPortfolioData(
